@@ -1,14 +1,16 @@
 import joblib
 import pandas as pd
 
-print("⏳ Loading Vectorizer and Preprocessed Data...")
+print("⏳ Loading Vectorizer and the NEW Master Dataset...")
 tfidf = joblib.load('tfidf_vectorizer.joblib')
-df = pd.read_csv('IMDB_Preprocessed.csv')
+# Load the 68k master file we just created
+df = pd.read_csv('IMDB_Zenodo_Master.csv')
 
-print("📊 Vectorizing 50,000 reviews (The 'Heavy' Part)...")
-# We do the 4-minute wait ONE LAST TIME here.
-review_matrix = tfidf.transform(df['cleaned_review'].fillna(''))
+print(f"📊 Vectorizing {len(df)} reviews... (This may take 3-5 minutes)")
+# We vectorize the 'review' column from the master file
+# Use .astype(str) to prevent any last-minute type errors
+review_matrix = tfidf.transform(df['review'].astype(str))
 
-print("💾 Saving Semantic Index...")
+print("💾 Saving the High-Precision Semantic Index...")
 joblib.dump(review_matrix, 'semantic_index.joblib')
-print("✅ Done! You now have 'semantic_index.joblib'. Your app will now load instantly.")
+print("✅ Done! 'semantic_index.joblib' is now aligned with your 68k master dataset.")

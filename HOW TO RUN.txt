@@ -1,0 +1,2 @@
+FIRST RUN BACKEND ON CMD PROMPT
+C:\Users\anshu\OneDrive\Desktop\MOVIE REVIEW PROJECT\streamlit run app.py
