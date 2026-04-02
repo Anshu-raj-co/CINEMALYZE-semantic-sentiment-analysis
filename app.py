@@ -16,13 +16,8 @@ from sklearn.metrics import accuracy_score
 from collections import Counter
 
 # --- 0. NLTK Resource Initialization ---
-@st.cache_resource
-def download_nltk_resources():
-    resources = ['stopwords', 'punkt', 'wordnet', 'averaged_perceptron_tagger']
-    for res in resources:
-        nltk.download(res, quiet=True)
-
-download_nltk_resources()
+nltk_path = os.path.join(os.getcwd(), 'nltk_data')
+nltk.data.path.append(nltk_path)
 
 # --- 1. CONFIGURATION & UI STYLING ---
 
