@@ -22,7 +22,7 @@ nltk.data.path.append(nltk_path)
 
 # --- 1. CONFIGURATION & UI STYLING ---
 OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "d21f0838")
-st.set_page_config(page_title="Cinemalyze Pro", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="Cinemalyze", page_icon="🎬", layout="wide")
 
 st.markdown("""
     <style>
