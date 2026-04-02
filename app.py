@@ -88,33 +88,38 @@ def get_exclusive_adjectives(pos_reviews, neg_reviews, n=5):
 @st.cache_resource
 def load_all_assets():
     try:
-        # 1. Load Small Models
+        # 1. Load small models
         model_lr = joblib.load('sentiment_model.joblib')
         model_et = joblib.load('extra_tree_model.joblib')
         tfidf = joblib.load('tfidf_vectorizer.joblib')
-        gc.collect() # Clean RAM immediately after loading
+        gc.collect()
         
-        # 2. Optimized CSV Loading (Categories save ~100MB RAM)
+        # 2. Optimized CSV Loading
         cols = ['sentiment', 'review', 'movie_title', 'source']
-        dtypes = {'sentiment': 'category', 'source': 'category', 'movie_title': 'string', 'review': 'string'}
-        df = pd.read_csv('IMDB_Zenodo_Master.csv', usecols=cols, dtype=dtypes, low_memory=True)
+        # TRICK: We only load 40k rows to stay under the 512MB RAM limit on Render
+        # On your local PC, you can remove 'nrows=40000'
+        df = pd.read_csv('IMDB_Zenodo_Master.csv', usecols=cols, nrows=40000, low_memory=True)
+        df['sentiment'] = df['sentiment'].astype('category')
+        df['source'] = df['source'].astype('category')
         gc.collect()
             
-        # 3. Large Semantic Matrix
-        review_matrix = joblib.load('semantic_index.joblib')
+        # 3. Use mmap_mode to keep the index on disk
+        review_matrix = joblib.load('semantic_index.joblib', mmap_mode='r')
+        
+        # We need to make sure the matrix matches the DF size if we sliced it
+        if len(df) < review_matrix.shape[0]:
+            review_matrix = review_matrix[:len(df)]
+            
         gc.collect()
         
-        # 4. Static Professional Metrics (Use your actual test results)
-        acc_lr = "89.4%" 
-        acc_et = "92.1%"
-
+        acc_lr, acc_et = "89.4%", "92.1%"
         return model_lr, model_et, tfidf, df, review_matrix, acc_lr, acc_et
     except Exception as e:
+        # This will help us see the REAL error in the Render logs
         st.error(f"Launch Error: {e}")
+        import traceback
+        st.text(traceback.format_exc())
         st.stop()
-
-# Execute loading
-model_lr, model_et, tfidf_vectorizer, local_df, global_review_matrix, acc_lr, acc_et = load_all_assets()
 
 # --- 4. Analytics Engine (Entity-Boosted) ---
 @st.cache_data(ttl=3600)
