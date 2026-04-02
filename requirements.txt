@@ -4,4 +4,4 @@ joblib
 requests
 nltk
 plotly
-scikit-learn
+scikit-learn==1.7.1
