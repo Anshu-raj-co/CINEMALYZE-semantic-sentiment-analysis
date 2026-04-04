@@ -1,67 +1,114 @@
-🎬 Cinemalyze — Semantic Movie Sentiment Intelligence Engine
-Cinemalyze is a high-performance NLP application that goes beyond simple "Positive/Negative" labels. By combining Ensemble Machine Learning (Extra Trees Classifier) with Semantic Vector Indexing, the application provides deep insights into audience perception and thematic similarity in movie reviews.
+# 🎬 Cinemalyze — Real-Time Movie Sentiment Intelligence Engine
 
-🔗 Live Demo: https://anshuraj1212-cinemalyze.hf.space/
+Cinemalyze is a real-time NLP-powered movie intelligence platform that analyzes audience sentiment using live data from TMDb. It combines dual-model machine learning (Logistic Regression + Extra Trees) with advanced text processing to deliver interactive, explainable insights into movie reviews.
 
-✨ Key Features
-Dual-Engine Sentiment Analysis: Utilizes a custom-trained Extra Trees Classifier to achieve high accuracy in detecting nuanced emotions in text.
-Semantic Similarity Engine: Leveraging a Semantic Index, the app identifies and retrieves existing reviews that are contextually related to the user's input, not just keyword-matched.
-Deep NLP Preprocessing: Implements a rigorous pipeline including tokenization, stop-word removal, and lemmatization.
-Linguistic Insights: Uses Part-of-Speech (POS) tagging to extract and display the "Top Adjectives" used in reviews to summarize the vibe of the critique.
-Model Agreement Score: A unique metric that compares the prediction against semantic neighbors to ensure reliability.
+🔗 **Live Demo:** https://anshuraj1212-cinemalyze.hf.space/
 
-🛠️ Tech Stack
-Language: Python 3.13
-Frontend: Streamlit (Reactive UI)
-Machine Learning: Scikit-Learn (Extra Trees, TF-IDF Vectorization)
-Natural Language Processing: NLTK (Punkt, WordNet, Stopwords, Perceptron Tagger)
-Serialization: Joblib (for efficient loading of 185MB+ model files)
-Deployment: Hugging Face Spaces (CPU Upgrade with 16GB RAM)
+---
 
-🧠 How It Works
-1. The NLP Pipeline
-Every input review undergoes a multi-stage transformation:
-Cleaning: Removal of HTML tags, special characters, and numbers.
-Tokenization: Breaking sentences into individual semantic units using punkt_tab.
-POS Tagging: Identifying adjectives (JJ) and nouns (NN) to understand descriptive context.
-Lemmatization: Reducing words to their root form (e.g., "watched" -> "watch") to normalize the input.
+## ✨ Key Features
 
-2. The Model Architecture
-While many sentiment projects use simple Logistic Regression, Cinemalyze uses an Extra Trees (Extremely Randomized Trees) ensemble.
-Why Extra Trees? It provides better generalization and reduces variance by introducing random splits in the decision trees, making it highly robust against the "noise" often found in informal movie reviews.
+* 🔴 **Real-Time Sentiment Analysis** — Fetches live user reviews using TMDb API and performs instant sentiment prediction
+* 🤖 **Dual-Model Inference** — Combines Logistic Regression (efficiency) and Extra Trees (robustness) for reliable predictions
+* 🧠 **Advanced NLP Pipeline** — Tokenization, stopword removal, lemmatization, and TF-IDF vectorization
+* 📊 **Interactive Dashboard** — Visual insights using Plotly (sentiment distribution, metrics, trends)
+* 🧾 **Linguistic Insights** — Extracts key adjectives from reviews using POS tagging
+* 🔁 **Model Agreement Score** — Compares predictions across models for consistency
+* 🎥 **Movie Intelligence Layer** — Displays movie metadata, cast, trailer, and recommendations
 
-3. Semantic Vector Space
-The project uses a pre-computed Semantic Index. By calculating the Cosine Similarity between the user's input and a massive dataset of movie reviews, the app can find "thematically identical" content even if different words are used.
+---
 
-📦 Installation & Local Setup
-To run this project on your local machine:
+## 📸 Preview
 
-Clone the Repository:
-Bash
+*(Add screenshots here — dashboard, sentiment chart, UI, etc.)*
+
+---
+
+## 🛠️ Tech Stack
+
+* **Language:** Python 3
+* **Frontend:** Streamlit
+* **Machine Learning:** Scikit-learn (Logistic Regression, Extra Trees, TF-IDF)
+* **NLP:** NLTK (Tokenization, Lemmatization, POS Tagging)
+* **Visualization:** Plotly
+* **API:** TMDb (The Movie Database)
+* **Deployment:** Hugging Face Spaces
+
+---
+
+## 🧠 How It Works
+
+### 🔹 1. Data Retrieval
+
+User inputs a movie → TMDb API fetches:
+
+* Movie metadata
+* User reviews
+* Recommendations
+
+---
+
+### 🔹 2. NLP Processing Pipeline
+
+Each review undergoes:
+
+* Cleaning → Remove HTML, symbols, noise
+* Tokenization → Split into words
+* Stopword Removal → Remove common words
+* Lemmatization → Normalize words
+* Vectorization → Convert text into TF-IDF features
+
+---
+
+### 🔹 3. Dual-Model Sentiment Analysis
+
+* **Logistic Regression** → Fast and efficient for sparse TF-IDF data
+* **Extra Trees Classifier** → Handles non-linearity and noisy text
+
+👉 Final system compares both outputs to improve reliability
+
+---
+
+### 🔹 4. Visualization & Insights
+
+* Sentiment distribution charts
+* Model agreement metrics
+* Positive vs negative word traits
+* Interactive review table
+
+---
+
+## 🚀 Motivation
+
+This project was built to bridge the gap between static ML models and real-world applications by integrating live data sources and building a scalable, interactive NLP system.
+
+---
+
+## 📦 Installation & Local Setup
+
+```bash
 git clone https://github.com/Anshu-raj-co/CINEMALYZE-semantic-sentiment-analysis.git
 cd CINEMALYZE-semantic-sentiment-analysis
-
-Install Dependencies:
-Bash
 pip install -r requirements.txt
-
-Run the Application:
-Bash
 streamlit run app.py
-📂 Project Structure
-Plaintext
-├── .streamlit/          # Streamlit configuration
-├── app.py               # Main application logic & UI
-├── requirements.txt     # Python dependencies
-├── .gitignore           # Secure exclusion of tokens and local caches
-├── extra_tree_model.joblib # Trained Sentiment Model
-└── semantic_index.joblib   # Vector search index for semantic lookup
-🛡️ Security & Deployment Note
-This project follows professional security practices by using .gitignore to prevent the leakage of Hugging Face Write Tokens. The application is hosted on an upgraded Hugging Face Space to ensure the 185MB+ models load smoothly without memory bottlenecks.
+```
 
-👨‍💻 Author
-Anshu Raj
-Role: Computer Science Engineering Student
-Specialization: Machine Learning & Data Science
-GitHub: @Anshu-raj-co
-Project Title: Cinemalyze - Semantic Sentiment Analysis Engine
+---
+
+## 🛡️ Security & Deployment
+
+* API keys handled securely via environment variables
+* Deployed on Hugging Face Spaces with optimized resource usage
+* Designed for scalability and real-time interaction
+
+---
+
+## 👨‍💻 Author
+
+**Anshu Raj**
+
+* Computer Science Engineering Student
+* Specialization: Machine Learning & Data Science
+* GitHub: https://github.com/Anshu-raj-co
+
+---
