@@ -1,71 +1,328 @@
 import streamlit as st
 import joblib
-import re
-import os
 import pandas as pd
 import requests
+import re
+import os
+import gc
 import nltk
-import gc  # Added for memory management
 import random
 import plotly.express as px
+import plotly.graph_objects as go
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
-from urllib.parse import quote
-from sklearn.metrics.pairwise import cosine_similarity
 from collections import Counter
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
-# --- 0. Optimized NLTK Initialization ---
-# We no longer download here; we just point to the pre-downloaded folder
-nltk_path = os.path.join(os.getcwd(), 'nltk_data')
-nltk.data.path.append(nltk_path)
+# --- SESSION STATE INIT ---
+if 'target_id' not in st.session_state:
+    st.session_state.target_id = None
+if 'search_query' not in st.session_state:
+    st.session_state.search_query = ""
+if 'page' not in st.session_state:
+    # Standardized to match the radio/if-logic in your provided code
+    st.session_state.page = "Main Analytics"
 
-# --- 1. CONFIGURATION & UI STYLING ---
-OMDB_API_KEY = os.environ.get("OMDB_API_KEY", "d21f0838")
+# --- MODEL LOADING ---
+@st.cache_resource
+def load_ai_brain():
+    m_lr = joblib.load('sentiment_model.joblib')
+    m_et = joblib.load('extra_tree_model.joblib')
+    vec = joblib.load('tfidf_vectorizer.joblib')
+    gc.collect()
+    return m_lr, m_et, vec
+
+try:
+    model_lr, model_et, tfidf_vectorizer = load_ai_brain()
+except Exception as e:
+    st.error(f"Error loading AI models: {e}. Ensure .joblib files are in the directory.")
+
+# --- CONFIG ---
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "f1d69efb3938a73c4aee8a756489171d")
+
 st.set_page_config(page_title="Cinemalyze", page_icon="🎬", layout="wide")
 
+# ── DESIGN SYSTEM ──────────────────────────────────────────────────────────────
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600&family=Inter:wght@400&display=swap');
-    :root { --color-primary: #14f195; --color-bg: #1e293b; --color-text: #cbd5e1; }
-    html, body, [class*="st-"] { font-family: 'Inter', sans-serif; color: var(--color-text); }
-    h1, h2, h3 { font-family: 'Poppins', sans-serif; color: white; }
-    .stMetric { background-color: #334155; border-radius: 12px; padding: 15px; border: 1px solid #475569; }
-    .footer { text-align: center; color: #94a3b8; font-size: 0.8rem; margin-top: 50px; }
-    .theme-tag { background-color: #14f195; color: #1e293b; padding: 4px 12px; border-radius: 15px; margin-right: 8px; display: inline-block; font-weight: bold; font-size: 0.8rem; margin-bottom: 5px; }
-    </style>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+    --gold:    #F5C518;
+    --red:     #E50914;
+    --sky:     #87CEEB;
+    --bg:      #0a0a0f;
+    --surface: #111118;
+    --card:    #18181f;
+    --border:  rgba(245,197,24,0.15);
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --pos:     #87CEEB;
+    --neg:     #E50914;
+}
+
+html, body, [class*="css"] {
+    font-family: 'DM Sans', sans-serif;
+    background-color: var(--bg) !important;
+    color: var(--text);
+}
+
+.main .block-container { padding: 2rem 3rem 4rem; max-width: 1400px; }
+[data-testid="stSidebar"] { background: var(--surface) !important; border-right: 1px solid var(--border); }
+[data-testid="stSidebar"] * { color: var(--text) !important; }
+
+.hero-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 6vw, 5.5rem);
+    letter-spacing: 0.06em;
+    line-height: 1;
+    background: linear-gradient(135deg, #F5C518 0%, #ffffff 50%, #87CEEB 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+}
+.hero-sub {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 0.3rem;
+    margin-bottom: 2rem;
+}
+
+[data-testid="stTextInput"] input {
+    background: var(--card) !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: 8px !important;
+    color: var(--text) !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 1rem !important;
+    padding: 0.75rem 1rem !important;
+    transition: border-color 0.2s;
+}
+[data-testid="stTextInput"] input:focus {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 0 3px rgba(245,197,24,0.12) !important;
+}
+[data-testid="stTextInput"] label {
+    color: var(--muted) !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+}
+
+[data-testid="stButton"] > button[kind="primary"] {
+    background: var(--gold) !important;
+    color: #0a0a0f !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-family: 'Bebas Neue', sans-serif !important;
+    font-size: 1.1rem !important;
+    letter-spacing: 0.1em !important;
+    padding: 0.65rem 2.5rem !important;
+    transition: transform 0.15s, box-shadow 0.15s !important;
+}
+[data-testid="stButton"] > button[kind="primary"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 24px rgba(245,197,24,0.35) !important;
+}
+
+[data-testid="stButton"] > button:not([kind="primary"]) {
+    background: var(--card) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.78rem !important;
+    padding: 0.4rem 0.6rem !important;
+    width: 100% !important;
+    transition: border-color 0.2s, background 0.2s !important;
+}
+[data-testid="stButton"] > button:not([kind="primary"]):hover {
+    border-color: var(--gold) !important;
+    background: rgba(245,197,24,0.07) !important;
+}
+
+.section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+[data-testid="stImage"] img {
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+    transition: transform 0.2s, border-color 0.2s !important;
+}
+[data-testid="stImage"] img:hover {
+    transform: scale(1.03) !important;
+    border-color: var(--gold) !important;
+}
+
+[data-testid="stMetric"] {
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 12px !important;
+    padding: 1.25rem 1.5rem !important;
+}
+[data-testid="stMetricLabel"] { color: var(--muted) !important; font-size: 0.72rem !important; letter-spacing: 0.1em !important; text-transform: uppercase !important; }
+[data-testid="stMetricValue"] { font-family: 'Bebas Neue', sans-serif !important; font-size: 2rem !important; color: var(--gold) !important; letter-spacing: 0.05em !important; }
+
+.movie-title-large {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    letter-spacing: 0.05em;
+    color: white;
+    line-height: 1.1;
+    margin-bottom: 0.5rem;
+}
+.movie-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    margin-bottom: 1rem;
+}
+.genre-pill {
+    display: inline-block;
+    background: rgba(245,197,24,0.12);
+    border: 1px solid rgba(245,197,24,0.3);
+    color: var(--gold);
+    border-radius: 100px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.72rem;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.08em;
+    margin-right: 0.4rem;
+    margin-bottom: 0.4rem;
+}
+.rating-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(245,197,24,0.1);
+    border: 1px solid var(--gold);
+    border-radius: 8px;
+    padding: 0.3rem 0.75rem;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    color: var(--gold);
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+}
+.overview-text {
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: #94a3b8;
+    border-left: 3px solid var(--gold);
+    padding-left: 1rem;
+    margin: 1rem 0;
+}
+.crew-line {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+}
+.crew-line span { color: var(--text); font-weight: 500; }
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+}
+
+hr { border-color: var(--border) !important; margin: 2rem 0 !important; }
+
+[data-testid="stAlert"] { border-radius: 10px !important; border: 1px solid var(--border) !important; }
+
+[data-testid="stExpander"] {
+    background: var(--card) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+}
+
+[data-testid="stCaptionContainer"] p { font-size: 0.72rem !important; color: var(--muted) !important; text-align: center; }
+
+.trend-rank {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.5rem;
+    color: rgba(245,197,24,0.15);
+    line-height: 1;
+    margin-bottom: -0.5rem;
+}
+.trend-rating {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--gold);
+    margin-top: 0.2rem;
+}
+
+.footer {
+    text-align: center;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+</style>
 """, unsafe_allow_html=True)
 
-# Movie DB preserved for suggestions
+# ── MOVIE DATABASE ─────────────────────────────────────────────────────────────
 ALL_MOVIES_DB = [
-    {"title": "The Dark Knight", "image_url": "https://upload.wikimedia.org/wikipedia/en/1/1c/The_Dark_Knight_%282008_film%29.jpg"},
-    {"title": "Inception", "image_url": "https://upload.wikimedia.org/wikipedia/en/2/2e/Inception_%282010%29_theatrical_poster.jpg"},
-    {"title": "Interstellar", "image_url": "https://upload.wikimedia.org/wikipedia/en/b/bc/Interstellar_film_poster.jpg"},
-    {"title": "Parasite", "image_url": "https://upload.wikimedia.org/wikipedia/en/5/53/Parasite_%282019_film%29.png"},
-    {"title": "Sultan", "image_url": "https://upload.wikimedia.org/wikipedia/en/1/1f/Sultan_film_poster.jpg"},
-    {"title": "The Matrix", "image_url": "https://image.tmdb.org/t/p/w500/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg"},
-    {"title": "Avatar", "image_url": "https://upload.wikimedia.org/wikipedia/en/d/d6/Avatar_%282009_film%29_poster.jpg"},
-    {"title": "Joker", "image_url": "https://upload.wikimedia.org/wikipedia/en/e/e1/Joker_%282019_film%29_poster.jpg"},
-    {"title": "Gladiator", "image_url": "https://upload.wikimedia.org/wikipedia/en/f/fb/Gladiator_%282000_film_poster%29.png"},
-    {"title": "Titanic", "image_url": "https://upload.wikimedia.org/wikipedia/en/1/18/Titanic_%281997_film%29_poster.png"},
-    {"title": "Avengers: Endgame", "image_url": "https://upload.wikimedia.org/wikipedia/en/0/0d/Avengers_Endgame_poster.jpg"},
-    {"title": "The Godfather", "image_url": "https://upload.wikimedia.org/wikipedia/en/1/1c/Godfather_ver1.jpg"}
+    {"title": "The Dark Knight",       "image_url": "https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg"},
+    {"title": "Inception",             "image_url": "https://image.tmdb.org/t/p/w500/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg"},
+    {"title": "Interstellar",          "image_url": "https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg"},
+    {"title": "Parasite",              "image_url": "https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg"},
+    {"title": "The Matrix",            "image_url": "https://image.tmdb.org/t/p/w500/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg"},
+    {"title": "Avatar",                "image_url": "https://image.tmdb.org/t/p/w500/jRXYjXNq0Cs2TcJjLkki24MLp7u.jpg"},
+    {"title": "Joker",                 "image_url": "https://image.tmdb.org/t/p/w500/udDclJoHjfjb8Ekgsd4FDteOkCU.jpg"},
+    {"title": "Gladiator",             "image_url": "https://image.tmdb.org/t/p/w500/ty8TGRuvJLPUmAR1H1nRIsgwvim.jpg"},
+    {"title": "Titanic",               "image_url": "https://image.tmdb.org/t/p/w500/9xjZS2rlVxm8SFx8kPC3aIGCOYQ.jpg"},
+    {"title": "Avengers: Endgame",     "image_url": "https://image.tmdb.org/t/p/w500/or06FN3Dka5tukK1e9sl16pB3iy.jpg"},
+    {"title": "Pulp Fiction",          "image_url": "https://image.tmdb.org/t/p/w500/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg"},
+    {"title": "Forrest Gump",          "image_url": "https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxm9H6zW2vR2.jpg"},
+    {"title": "The Lion King",         "image_url": "https://image.tmdb.org/t/p/w500/sKCr78MXSLixwmZ8DyJLrpMsd15.jpg"},
+    {"title": "Spirited Away",         "image_url": "https://image.tmdb.org/t/p/w500/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg"},
+    {"title": "Into the Spider-Verse", "image_url": "https://image.tmdb.org/t/p/w500/iiZZdoQBEYBv6id8su7ImL0oCbD.jpg"},
+  #  {"title": "3 Idiots",              "image_url": "https://image.tmdb.org/t/p/w500/66A9Mqez2sFOGVaObYTOHqYT24k.jpg"},
+    {"title": "Dune",                  "image_url": "https://image.tmdb.org/t/p/w500/d5NXSklXo0qyIYkgV94XAgMIckC.jpg"},
+   # {"title": "Sultan",                "image_url": "https://image.tmdb.org/t/p/w500/dTbBWRGXpGl7jJXPbRMBG9urTzG.jpg"},
 ]
 
 if 'random_recs' not in st.session_state:
     st.session_state.random_recs = random.sample(ALL_MOVIES_DB, 5)
 
-# --- 2. Technical NLP Pipeline (Preserved) ---
+# ── NLP HELPERS ───────────────────────────────────────────────────────────────
 lemmatizer = WordNetLemmatizer()
 stop_words = set(stopwords.words('english'))
 
 def advanced_nlp_processing(text):
-    text_clean = re.sub(r'<.*?>', ' ', str(text))
-    text_clean = re.sub(r'[^a-zA-Z]', ' ', text_clean).lower()
-    tokens = word_tokenize(text_clean)
+    clean = re.sub(r'<.*?>', ' ', str(text))
+    clean = re.sub(r'[^a-zA-Z]', ' ', clean).lower()
+    tokens = word_tokenize(clean)
     return " ".join([lemmatizer.lemmatize(w) for w in tokens if w not in stop_words])
 
-def get_top_adjectives(texts, n=15):
+def get_top_adjectives(texts):
     all_words = []
     for text in texts:
         tokens = word_tokenize(str(text).lower())
@@ -74,201 +331,310 @@ def get_top_adjectives(texts, n=15):
         all_words.extend(adjectives)
     return Counter(all_words)
 
-def get_exclusive_adjectives(pos_reviews, neg_reviews, n=5):
-    pos_counts = get_top_adjectives(pos_reviews)
-    neg_counts = get_top_adjectives(neg_reviews)
-    exclusive_pos, exclusive_neg = [], []
-    for word, count in pos_counts.most_common(50):
-        if count > neg_counts.get(word, 0) * 1.5: exclusive_pos.append(word)
-    for word, count in neg_counts.most_common(50):
-        if count > pos_counts.get(word, 0) * 1.5: exclusive_neg.append(word)
-    return exclusive_pos[:n], exclusive_neg[:n]
-
-# --- 3. Optimized Asset Loading (RAM-Safe) ---
-@st.cache_resource
-def load_all_assets():
-    try:
-        # 1. Load small models
-        model_lr = joblib.load('sentiment_model.joblib')
-        model_et = joblib.load('extra_tree_model.joblib')
-        tfidf = joblib.load('tfidf_vectorizer.joblib')
-        gc.collect()
-        
-        # 2. Optimized CSV Loading
-        cols = ['sentiment', 'review', 'movie_title', 'source']
-        # TRICK: We only load 40k rows to stay under the 512MB RAM limit on Render
-        # On your local PC, you can remove 'nrows=40000'
-        df = pd.read_csv('IMDB_Zenodo_Master.csv', usecols=cols, nrows=40000, low_memory=True)
-        df['sentiment'] = df['sentiment'].astype('category')
-        df['source'] = df['source'].astype('category')
-        gc.collect()
-            
-        # 3. Use mmap_mode to keep the index on disk
-        review_matrix = joblib.load('semantic_index.joblib', mmap_mode='r')
-        
-        # We need to make sure the matrix matches the DF size if we sliced it
-        if len(df) < review_matrix.shape[0]:
-            review_matrix = review_matrix[:len(df)]
-            
-        gc.collect()
-        
-        acc_lr, acc_et = "89.4%", "92.1%"
-        return model_lr, model_et, tfidf, df, review_matrix, acc_lr, acc_et
-    except Exception as e:
-        # This will help us see the REAL error in the Render logs
-        st.error(f"Launch Error: {e}")
-        import traceback
-        st.text(traceback.format_exc())
-        st.stop()
-
-# --- 4. Analytics Engine (Entity-Boosted) ---
+# ── API FUNCTIONS ──────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
-def get_movie_analysis(movie_name):
-    api_url = f"http://www.omdbapi.com/?t={quote(movie_name)}&apikey={OMDB_API_KEY}&plot=full"
+def get_full_movie_intelligence(query=None, movie_id=None):
+    session = requests.Session()
+    session.mount("https://", HTTPAdapter(max_retries=Retry(total=3, backoff_factor=1)))
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        res = requests.get(api_url, timeout=10).json()
-        if res.get('Response') == 'False': return None, None, None, None, "Movie not found."
-
-        target_title = res.get('Title')
-        director = res.get('Director', '').split(',')[0] 
-        actors = res.get('Actors', '').split(', ')[:2]   
-
-        # 1. VERIFIED SEARCH
-        direct_matches = local_df[(local_df['source'] == 'Verified') & 
-                                  (local_df['movie_title'].str.lower() == target_title.lower())]
-        
-        if len(direct_matches) >= 3:
-            reviews = direct_matches['review'].head(10).tolist()
-            scores = [1.0] * len(reviews)
-            match_type = "Verified Title Match"
-        else:
-            # 2. ENTITY-BOOSTED FALLBACK
-            boosted_query = f"{director} " + " ".join(actors) + " " + res.get('Plot', '')
-            query_text = advanced_nlp_processing(boosted_query)
-            query_vec = tfidf_vectorizer.transform([query_text])
+        if not movie_id:
+            s_res = session.get("https://api.themoviedb.org/3/search/movie",
+                                params={"api_key": TMDB_API_KEY, "query": query},
+                                headers=headers, timeout=10)
+            # BUG FIX: Handle empty search results gracefully
+            search_results = s_res.json().get('results', [])
+            if not search_results:
+                return "NOT_FOUND" 
+            movie_id = search_results[0]['id']
             
-            # Semantic dot product (The core technical logic)
-            similarities = cosine_similarity(query_vec, global_review_matrix).flatten()
-            max_s = max(similarities) if max(similarities) > 0 else 1
-            norm_sims = similarities / max_s
-            
-            sorted_indices = norm_sims.argsort()[::-1]
-            final_indices = []
-            for i in sorted_indices:
-                if local_df.iloc[i]['source'] == 'Thematic' and norm_sims[i] > 0.25:
-                    final_indices.append(i)
-                if len(final_indices) == 10: break
-            
-            reviews = local_df.iloc[final_indices]['review'].tolist()
-            scores = norm_sims[final_indices].tolist()
-            match_type = "Entity-Boosted Semantic Match"
+        full_res = session.get(f"https://api.themoviedb.org/3/movie/{movie_id}",
+                               params={"api_key": TMDB_API_KEY, "append_to_response": "videos,credits,reviews,recommendations"},
+                               headers=headers, timeout=15)
+        return full_res.json()
+    except:
+        return None
 
-        # Theme Extraction (Feature mapping)
-        feature_names = tfidf_vectorizer.get_feature_names_out()
-        query_scores = tfidf_vectorizer.transform([advanced_nlp_processing(res.get('Plot'))]).toarray()[0]
-        keywords = [feature_names[i] for i in query_scores.argsort()[-6:][::-1] if query_scores[i] > 0]
+@st.cache_data(ttl=3600)
+def get_trending_movies_robust():
+    session = requests.Session()
+    session.mount("https://", HTTPAdapter(max_retries=Retry(total=3, backoff_factor=1)))
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        res = session.get("https://api.themoviedb.org/3/trending/movie/week",
+                          params={"api_key": TMDB_API_KEY}, headers=headers, timeout=10)
+        return res.json().get('results', [])
+    except:
+        return []
 
-        return res, reviews, scores, keywords, match_type
-    except Exception as e: return None, None, None, None, str(e)
+# ── SIDEBAR ────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div style='padding:1rem 0 1.5rem;'>
+        <div style='font-family:"Bebas Neue",sans-serif;font-size:1.8rem;
+                    letter-spacing:0.1em;color:#F5C518;'>CINEMALYZE</div>
+        <div style='font-family:"DM Mono",monospace;font-size:0.6rem;
+                    letter-spacing:0.2em;color:#64748b;text-transform:uppercase;'>
+            Semantic AI Engine
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- 5. UI Layout (Preserved for Professional Polish) ---
-st.title("🎬 Cinemalyze")
-st.markdown("### Semantic AI & Model Comparison Dashboard")
+    page_options = ["Main Analytics", "Trending Now"]
+    current_idx = 0 if st.session_state.page == "Main Analytics" else 1
+    st.session_state.page = st.sidebar.radio("Navigate to:", page_options, index=current_idx)
 
-tab1, tab2, tab3 = st.tabs(["🚀 Main Analytics", "📂 Full Database Search", "✍️ Manual Test"])
+    st.markdown("<hr style='border-color:rgba(245,197,24,0.15);margin:1.5rem 0;'>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='font-family:"DM Mono",monospace;font-size:0.65rem;
+                letter-spacing:0.1em;color:#64748b;line-height:1.8;'>
+        <div style='color:#F5C518;margin-bottom:0.5rem;'>MODELS ACTIVE</div>
+        ▸ Logistic Regression<br>
+        ▸ Extra Trees Classifier<br>
+        ▸ TF-IDF Vectorizer<br><br>
+        <div style='color:#F5C518;margin-bottom:0.5rem;'>DATA SOURCE</div>
+        ▸ TMDb Live API<br>
+        ▸ Real user reviews
+    </div>
+    """, unsafe_allow_html=True)
 
-with tab1:
-    movie_q = st.text_input("Enter Movie Title", placeholder="e.g. Iron Man, Interstellar")
-    
-    st.markdown("<h4 style='color: #94a3b8;'>Try a suggested film:</h4>", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: MAIN ANALYTICS
+# ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.page == "Main Analytics":
+
+    st.markdown("<p class='hero-title'>CINEMALYZE</p>", unsafe_allow_html=True)
+    st.markdown("<p class='hero-sub'>⬡ Semantic AI &nbsp;·&nbsp; Live Sentiment Intelligence &nbsp;·&nbsp; TMDb Integration</p>", unsafe_allow_html=True)
+
+    movie_input = st.text_input(
+        "SEARCH MOVIE",
+        value=st.session_state.search_query,
+        placeholder="e.g. Titanic, Inception, Dangal…"
+    )
+
+    st.markdown("<div class='section-label'>⬡ All Time Classics</div>", unsafe_allow_html=True)
+
     cols = st.columns(5)
-    selected_rec = None
     for i, movie in enumerate(st.session_state.random_recs):
         with cols[i]:
             st.image(movie['image_url'], use_container_width=True)
-            if st.button(movie['title'], key=f"rec_btn_{i}", use_container_width=True): selected_rec = movie['title']
+            if st.button(movie['title'], key=f"rec_btn_{i}", use_container_width=True):
+                st.session_state.search_query = movie['title']
+                st.session_state.target_id = None
+                st.rerun()
 
-    target_movie = selected_rec if selected_rec else movie_q
-    if (st.button("Run Engine", type="primary") or selected_rec) and target_movie:
-        with st.spinner(f"Processing..."):
-            movie_data, reviews, scores, keywords, match_type = get_movie_analysis(target_movie)
-            
-            if movie_data:
-                st.markdown(f"### 🤖 High-Level Intelligence | {match_type}")
-                h1, h2, h3, h4 = st.columns(4)
-                h1.metric("IMDb Rating", f"⭐ {movie_data.get('imdbRating', 'N/A')}")
-                h2.metric("Log. Regression Accuracy", acc_lr)
-                h3.metric("Extra Trees Accuracy", acc_et)
-                h4.metric("Reliability", "High" if match_type == "Verified Title Match" else "Medium")
+    st.markdown("<br>", unsafe_allow_html=True)
+    run_clicked = st.button("▶  Run AI Engine", type="primary")
+    target_movie = st.session_state.search_query if st.session_state.search_query else movie_input
+    should_run = run_clicked or st.session_state.target_id or st.session_state.search_query
 
-                c1, c2 = st.columns([1, 2])
-                with c1:
-                    if movie_data.get('Poster') != "N/A": st.image(movie_data['Poster'])
-                with c2:
-                    st.header(f"{movie_data['Title']} ({movie_data['Year']})")
-                    theme_html = "".join([f'<span class="theme-tag">{k.upper()}</span>' for k in keywords])
-                    st.markdown(theme_html, unsafe_allow_html=True)
-                    st.write(f"**Plot Summary:** {movie_data['Plot']}")
-                
-                st.divider()
+    if should_run and target_movie:
+        with st.spinner("Fetching intelligence…"):
+            data = get_full_movie_intelligence(query=target_movie, movie_id=st.session_state.target_id)
 
-                if not reviews:
-                    st.warning("Low thematic similarity — No reviews met the quality threshold.")
-                else:
-                    pos_list, neg_list, results_table = [], [], []
-                    for r, score in zip(reviews, scores):
-                        clean_r = advanced_nlp_processing(r)
-                        vec_r = tfidf_vectorizer.transform([clean_r])
-                        pred = model_lr.predict(vec_r)[0]
-                        prob = model_lr.predict_proba(vec_r)[0]
-                        if pred == 'positive': pos_list.append(r)
-                        else: neg_list.append(r)
+        # UI BUG FIX: Display error if movie is not found or API fails
+        if data == "NOT_FOUND":
+            st.error(f"🎬 Oops! We couldn't find any movie titled '{target_movie}'. Please check the spelling.")
+        elif not data:
+            st.error("📡 Connection error. Please check your network or API key settings.")
+        else:
+            # ── MOVIE PROFILE ─────────────────────────────────────────────
+            st.markdown("<div class='section-label'>⬡ Film Profile</div>", unsafe_allow_html=True)
 
-                        results_table.append({
-                            "Source": "✅ Verified" if score == 1.0 else "🔍 Thematic",
-                            "Relevant Review": r.replace('<br /><br />', ' '), 
-                            "Sentiment": pred.upper(),
-                            "Confidence": f"{max(prob)*100:.1f}%" 
-                        })
+            director = next((p['name'] for p in data['credits']['crew'] if p['job'] == 'Director'), "N/A")
+            cast_names = ', '.join([p['name'] for p in data['credits']['cast'][:5]])
+            genres_html = ''.join([f"<span class='genre-pill'>{g['name']}</span>" for g in data['genres']])
+            trailers = [v for v in data['videos']['results'] if v['type'] == 'Trailer' and v['site'] == 'YouTube']
 
-                    st.markdown("### 🧠 Semantic NLP Insights")
-                    i1, i2 = st.columns(2)
-                    p_adj, n_adj = get_exclusive_adjectives(pos_list, neg_list)
-                    with i1:
-                        st.write("🟢 **Positive Sentiment Indicators:**")
-                        st.write(", ".join(p_adj) if p_adj else "N/A")
-                    with i2:
-                        st.write("🔴 **Negative Sentiment Indicators:**")
-                        st.write(", ".join(n_adj) if n_adj else "N/A")
+            c1, c2 = st.columns([1, 2.8], gap="large")
+            with c1:
+                if data.get('poster_path'):
+                    st.image(f"https://image.tmdb.org/t/p/w500{data['poster_path']}", use_container_width=True)
+            with c2:
+                st.markdown(f"""
+                <div class='movie-title-large'>{data['title']}</div>
+                <div class='movie-meta'>{data['release_date'][:4]} &nbsp;·&nbsp; {data.get('runtime','—')} min &nbsp;·&nbsp; {data.get('original_language','').upper()}</div>
+                <div style='margin-bottom:1rem;'>{genres_html}</div>
+                <div class='rating-badge'>★ &nbsp;{data['vote_average']:.1f}
+                    <span style='font-family:"DM Sans",sans-serif;font-size:0.75rem;color:#94a3b8;margin-left:0.4rem;'>
+                        /10 &nbsp;({data.get('vote_count','—')} votes)
+                    </span>
+                </div>
+                <div class='overview-text'>{data['overview']}</div>
+                <div class='crew-line'>🎬 Director &nbsp;<span>{director}</span></div>
+                <div class='crew-line'>🎭 Cast &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span>{cast_names}</span></div>
+                """, unsafe_allow_html=True)
 
-                    st.divider()
-                    met_col, chart_col = st.columns([1, 2])
-                    pos_count = len(pos_list)
-                    with met_col:
-                        st.metric("Final Sentiment Score", f"{(pos_count/len(reviews))*100:.1f}% Positive")
-                    with chart_col:
-                        fig = px.pie(names=["Positive", "Negative"], values=[pos_count, len(reviews)-pos_count], hole=0.5,
-                                     color=["Positive", "Negative"], color_discrete_map={"Positive": "#14f195", "Negative": "#ff4b4b"})
-                        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor="rgba(0,0,0,0)", height=250)
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    df_res = pd.DataFrame(results_table)
-                    def color_sent(val):
-                        if val == 'POSITIVE': return 'color: #14f195;'
-                        elif val == 'NEGATIVE': return 'color: #ff4b4b;'
-                        return ''
-                    st.dataframe(df_res.style.applymap(color_sent, subset=['Sentiment']), use_container_width=True, hide_index=True)
+                if trailers:
+                    with st.expander("▶  Watch Trailer"):
+                        st.video(f"https://www.youtube.com/watch?v={trailers[0]['key']}")
 
-with tab2:
-    st.header("Global Search")
-    sq = st.text_input("Filter database by keyword:")
-    if sq: st.dataframe(local_df[local_df['review'].str.contains(sq, case=False)].head(15))
+            st.markdown("<hr>", unsafe_allow_html=True)
 
-with tab3:
-    st.header("Manual Sentiment Test")
-    user_txt = st.text_area("Analyze custom movie feedback:", height=150)
-    if st.button("Predict"):
-        v = tfidf_vectorizer.transform([advanced_nlp_processing(user_txt)])
-        st.write(f"Prediction: **{model_lr.predict(v)[0].upper()}**")
+            # ── SENTIMENT ENGINE ──────────────────────────────────────────
+            reviews = data['reviews'].get('results', [])
 
-st.markdown('<div class="footer">Anshu Raj • Semantic AI v4.0 • Optimized & Entity-Boosted</div>', unsafe_allow_html=True)
+            if not reviews:
+                st.warning("No user reviews found on TMDb for this title.")
+            else:
+                st.markdown("<div class='section-label'>⬡ AI Sentiment Analysis</div>", unsafe_allow_html=True)
+
+                table_data = []
+                pos_lr, pos_et = 0, 0
+                p_content, n_content = [], []
+
+                for r in reviews[:10]:
+                    clean = advanced_nlp_processing(r['content'])
+                    vec = tfidf_vectorizer.transform([clean])
+                    p_lr = model_lr.predict(vec)[0]
+                    p_et = model_et.predict(vec)[0]
+                    conf = f"{max(model_lr.predict_proba(vec)[0])*100:.1f}%"
+
+                    if p_lr == 'positive':
+                        pos_lr += 1
+                        p_content.append(r['content'])
+                    else:
+                        n_content.append(r['content'])
+                    if p_et == 'positive':
+                        pos_et += 1
+
+                    table_data.append({
+                        "Author": r['author'],
+                        "Log. Regression": p_lr.upper(),
+                        "Extra Trees": p_et.upper(),
+                        "Confidence": conf,
+                        "Full Review": r['content']
+                    })
+
+                total = len(table_data)
+
+                # Metrics
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Reviews Analysed", total)
+                m2.metric("LR Positive", f"{(pos_lr/total)*100:.0f}%")
+                m3.metric("ET Positive", f"{(pos_et/total)*100:.0f}%")
+                m4.metric("Model Agreement", "High ✓" if abs(pos_lr - pos_et) <= 1 else "Varying")
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Chart + word traits
+                v1, v2 = st.columns([1.2, 1], gap="large")
+                with v1:
+                    fig = go.Figure(go.Pie(
+                        labels=["Positive", "Negative"],
+                        values=[pos_lr, total - pos_lr],
+                        hole=0.55,
+                        marker_colors=["#87CEEB", "#E50914"],
+                        textinfo='label+percent',
+                        textfont=dict(family="DM Mono", size=12, color="white"),
+                        hovertemplate="%{label}: %{value} reviews<extra></extra>"
+                    ))
+                    fig.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        showlegend=False,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        annotations=[dict(
+                            text=f"<b>{(pos_lr/total)*100:.0f}%</b><br>positive",
+                            x=0.5, y=0.5, font_size=18,
+                            font_color="#F5C518",
+                            font_family="Bebas Neue",
+                            showarrow=False
+                        )]
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with v2:
+                    pos_words = [w for w, _ in get_top_adjectives(p_content).most_common(6)]
+                    neg_words = [w for w, _ in get_top_adjectives(n_content).most_common(6)]
+                    st.markdown(f"""
+                    <div style='margin-bottom:1.5rem;margin-top:2rem;'>
+                        <div style='font-family:"DM Mono",monospace;font-size:0.65rem;
+                                    letter-spacing:0.15em;text-transform:uppercase;
+                                    color:#87CEEB;margin-bottom:0.6rem;'>● Positive Traits</div>
+                        <div style='font-size:0.9rem;color:#e2e8f0;line-height:1.8;'>
+                            {", ".join(pos_words) if pos_words else "—"}
+                        </div>
+                    </div>
+                    <div>
+                        <div style='font-family:"DM Mono",monospace;font-size:0.65rem;
+                                    letter-spacing:0.15em;text-transform:uppercase;
+                                    color:#E50914;margin-bottom:0.6rem;'>● Negative Traits</div>
+                        <div style='font-size:0.9rem;color:#e2e8f0;line-height:1.8;'>
+                            {", ".join(neg_words) if neg_words else "—"}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Review table
+                st.markdown("<div class='section-label' style='margin-top:1.5rem;'>⬡ Review Breakdown</div>", unsafe_allow_html=True)
+                df = pd.DataFrame(table_data)
+
+                def style_sent(val):
+                    if val == 'POSITIVE': return 'color: #87CEEB; font-weight: 600;'
+                    if val == 'NEGATIVE': return 'color: #E50914; font-weight: 600;'
+                    return ''
+
+                st.dataframe(
+                    df.style.map(style_sent, subset=['Log. Regression', 'Extra Trees']),
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            # ── SIMILAR MOVIES ────────────────────────────────────────────
+            st.markdown("<hr>", unsafe_allow_html=True)
+            st.markdown("<div class='section-label'>⬡ You May Also Like</div>", unsafe_allow_html=True)
+
+            recs = data['recommendations'].get('results', [])[:6]
+            if recs:
+                rcols = st.columns(6)
+                for idx, movie in enumerate(recs):
+                    with rcols[idx]:
+                        if movie.get('poster_path'):
+                            st.image(f"https://image.tmdb.org/t/p/w200{movie['poster_path']}")
+                        st.caption(movie['title'])
+                        if st.button("Analyse", key=f"sim_{movie['id']}"):
+                            st.session_state.target_id = movie['id']
+                            st.session_state.search_query = movie['title']
+                            st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE: TRENDING NOW
+# ══════════════════════════════════════════════════════════════════════════════
+elif st.session_state.page == "Trending Now":
+
+    st.markdown("<p class='hero-title'>TRENDING</p>", unsafe_allow_html=True)
+    st.markdown("<p class='hero-sub'>⬡ Live data from TMDb &nbsp;·&nbsp; Updated weekly</p>", unsafe_allow_html=True)
+
+    try:
+        trends = get_trending_movies_robust()
+        if not trends:
+            st.info("No trending data available at the moment.")
+        else:
+            for i in range(0, len(trends), 4):
+                row_movies = trends[i:i+4]
+                cols = st.columns(4, gap="medium")
+                for idx, movie in enumerate(row_movies):
+                    with cols[idx]:
+                        rank = i + idx + 1
+                        st.markdown(f"<div class='trend-rank'>#{rank:02d}</div>", unsafe_allow_html=True)
+                        if movie.get('poster_path'):
+                            st.image(f"https://image.tmdb.org/t/p/w500{movie['poster_path']}", use_container_width=True)
+                        st.markdown(f"**{movie.get('title')}**")
+                        st.markdown(f"<div class='trend-rating'>★ {movie.get('vote_average',0):.1f} / 10</div>", unsafe_allow_html=True)
+                        if st.button("Analyse Sentiment", key=f"trend_{movie['id']}", use_container_width=True):
+                            st.session_state.target_id = movie['id']
+                            st.session_state.search_query = movie.get('title')
+                            st.session_state.page = "Main Analytics"
+                            st.rerun()
+                st.markdown("<hr>", unsafe_allow_html=True)
+
+    except Exception as e:
+        st.error(f"Connection failed: {e}. Please check your internet or API key.")
+
+# ── FOOTER ─────────────────────────────────────────────────────────────────────
+st.markdown("""
+<div class='footer'>
+    Anshu Raj &nbsp;·&nbsp; Semantic AI Engine &nbsp;·&nbsp; Live TMDb Integration &nbsp;
+</div>
+""", unsafe_allow_html=True)
