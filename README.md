@@ -20,7 +20,11 @@ Cinemalyze is a real-time NLP-powered movie intelligence platform that analyzes 
 
 ## 📸 Preview
 
-*(Add screenshots here — dashboard, sentiment chart, UI, etc.)*
+*<img width="2537" height="1282" alt="Screenshot 2026-04-04 174252" src="https://github.com/user-attachments/assets/1bdf607f-644f-47b4-904a-f7c7e4086919" />
+<img width="2459" height="1192" alt="Screenshot 2026-04-04 174319" src="https://github.com/user-attachments/assets/dfaa8356-6bd5-4376-b0f1-b9451b28fef8" />
+<img width="2119" height="1206" alt="Screenshot 2026-04-04 174346" src="https://github.com/user-attachments/assets/7caa2dd4-b492-4ec4-8e06-41f4b8ea1607" />
+<img width="2451" height="1287" alt="Screenshot 2026-04-04 174403" src="https://github.com/user-attachments/assets/d52aaa47-cdd5-4181-bbfd-7e9ff07abe5d" />
+*
 
 ---
 
