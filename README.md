@@ -6,15 +6,15 @@ Cinemalyze is a real-time NLP-powered movie intelligence platform that analyzes 
 
 ---
 
-## ✨ Key Features
+##  Key Features
 
-* 🔴 **Real-Time Sentiment Analysis** — Fetches live user reviews using TMDb API and performs instant sentiment prediction
-* 🤖 **Dual-Model Inference** — Combines Logistic Regression (efficiency) and Extra Trees (robustness) for reliable predictions
-* 🧠 **Advanced NLP Pipeline** — Tokenization, stopword removal, lemmatization, and TF-IDF vectorization
-* 📊 **Interactive Dashboard** — Visual insights using Plotly (sentiment distribution, metrics, trends)
-* 🧾 **Linguistic Insights** — Extracts key adjectives from reviews using POS tagging
-* 🔁 **Model Agreement Score** — Compares predictions across models for consistency
-* 🎥 **Movie Intelligence Layer** — Displays movie metadata, cast, trailer, and recommendations
+*  **Real-Time Sentiment Analysis** — Fetches live user reviews using TMDb API and performs instant sentiment prediction
+*  **Dual-Model Inference** — Combines Logistic Regression (efficiency) and Extra Trees (robustness) for reliable predictions
+*  **Advanced NLP Pipeline** — Tokenization, stopword removal, lemmatization, and TF-IDF vectorization
+*  **Interactive Dashboard** — Visual insights using Plotly (sentiment distribution, metrics, trends)
+*  **Linguistic Insights** — Extracts key adjectives from reviews using POS tagging
+*  **Model Agreement Score** — Compares predictions across models for consistency
+*  **Movie Intelligence Layer** — Displays movie metadata, cast, trailer, and recommendations
 
 ---
 
@@ -28,7 +28,7 @@ Cinemalyze is a real-time NLP-powered movie intelligence platform that analyzes 
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 * **Language:** Python 3
 * **Frontend:** Streamlit
@@ -40,7 +40,7 @@ Cinemalyze is a real-time NLP-powered movie intelligence platform that analyzes 
 
 ---
 
-## 🧠 How It Works
+##  How It Works
 
 ### 🔹 1. Data Retrieval
 
@@ -82,13 +82,13 @@ Each review undergoes:
 
 ---
 
-## 🚀 Motivation
+##  Motivation
 
 This project was built to bridge the gap between static ML models and real-world applications by integrating live data sources and building a scalable, interactive NLP system.
 
 ---
 
-## 📦 Installation & Local Setup
+##  Installation & Local Setup
 
 ```bash
 git clone https://github.com/Anshu-raj-co/CINEMALYZE-semantic-sentiment-analysis.git
@@ -99,7 +99,7 @@ streamlit run app.py
 
 ---
 
-## 🛡️ Security & Deployment
+##  Security & Deployment
 
 * API keys handled securely via environment variables
 * Deployed on Hugging Face Spaces with optimized resource usage
@@ -107,7 +107,7 @@ streamlit run app.py
 
 ---
 
-## 👨‍💻 Author
+##  Author
 
 **Anshu Raj**
 
