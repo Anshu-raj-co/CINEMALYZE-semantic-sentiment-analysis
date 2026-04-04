@@ -1,8 +1,7 @@
-🎬 Cinemalyze: Advanced Movie Sentiment & Semantic Engine
+🎬 Cinemalyze — Semantic Movie Sentiment Intelligence Engine
 Cinemalyze is a high-performance NLP application that goes beyond simple "Positive/Negative" labels. By combining Ensemble Machine Learning (Extra Trees Classifier) with Semantic Vector Indexing, the application provides deep insights into audience perception and thematic similarity in movie reviews.
 
-🚀 Live Demo
-https://anshuraj1212-cinemalyze.hf.space/
+🔗 Live Demo: https://anshuraj1212-cinemalyze.hf.space/
 
 ✨ Key Features
 Dual-Engine Sentiment Analysis: Utilizes a custom-trained Extra Trees Classifier to achieve high accuracy in detecting nuanced emotions in text.
