@@ -15,6 +15,20 @@ from nltk.tokenize import word_tokenize
 from collections import Counter
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import nltk
+
+# The POS Tagger fix for Python 3.13
+nltk.download('averaged_perceptron_tagger_eng')
+
+# The Tokenizer fix for newer NLTK versions
+nltk.download('punkt_tab')
+
+# Standard essentials for your sentiment logic
+nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('wordnet')
+nltk.download('omw_latin1')
+nltk.download('omw-1.4')
 
 # --- SESSION STATE INIT ---
 if 'target_id' not in st.session_state:
@@ -300,7 +314,7 @@ ALL_MOVIES_DB = [
     {"title": "Titanic",               "image_url": "https://image.tmdb.org/t/p/w500/9xjZS2rlVxm8SFx8kPC3aIGCOYQ.jpg"},
     {"title": "Avengers: Endgame",     "image_url": "https://image.tmdb.org/t/p/w500/or06FN3Dka5tukK1e9sl16pB3iy.jpg"},
     {"title": "Pulp Fiction",          "image_url": "https://image.tmdb.org/t/p/w500/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg"},
-    {"title": "Forrest Gump",          "image_url": "https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxm9H6zW2vR2.jpg"},
+   # {"title": "Forrest Gump",          "image_url": "https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxm9H6zW2vR2.jpg"},
     {"title": "The Lion King",         "image_url": "https://image.tmdb.org/t/p/w500/sKCr78MXSLixwmZ8DyJLrpMsd15.jpg"},
     {"title": "Spirited Away",         "image_url": "https://image.tmdb.org/t/p/w500/39wmItIWsg5sZMyRUHLkWBcuVCM.jpg"},
     {"title": "Into the Spider-Verse", "image_url": "https://image.tmdb.org/t/p/w500/iiZZdoQBEYBv6id8su7ImL0oCbD.jpg"},
