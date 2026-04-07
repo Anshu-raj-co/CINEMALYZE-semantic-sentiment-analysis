@@ -5,3 +5,5 @@ requests
 nltk
 plotly
 scikit-learn==1.7.1
+thefuzz
+python-Levenshtein

@@ -15,6 +15,7 @@ from nltk.tokenize import word_tokenize
 from collections import Counter
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from thefuzz import process as fuzz_process
 import nltk
 
 # The POS Tagger fix for Python 3.13
@@ -67,25 +68,23 @@ st.markdown("""
     --gold:    #F5C518;
     --red:     #E50914;
     --sky:     #87CEEB;
-    --bg:      #0a0a0f;
-    --surface: #111118;
-    --card:    #18181f;
-    --border:  rgba(245,197,24,0.15);
-    --text:    #e2e8f0;
-    --muted:   #64748b;
+    --border:  rgba(245,197,24,0.18);
     --pos:     #87CEEB;
     --neg:     #E50914;
+    /* These inherit from Streamlit's native theme — flip with Light/Dark automatically */
+    --text:    var(--text-color);
+    --muted:   color-mix(in srgb, var(--text-color) 60%, transparent);
+    --card:    color-mix(in srgb, var(--text-color) 5%, transparent);
+    --surface: color-mix(in srgb, var(--text-color) 3%, transparent);
 }
 
 html, body, [class*="css"] {
     font-family: 'DM Sans', sans-serif;
-    background-color: var(--bg) !important;
-    color: var(--text);
+    /* No hardcoded background-color — Streamlit controls this natively */
 }
 
 .main .block-container { padding: 2rem 3rem 4rem; max-width: 1400px; }
-[data-testid="stSidebar"] { background: var(--surface) !important; border-right: 1px solid var(--border); }
-[data-testid="stSidebar"] * { color: var(--text) !important; }
+[data-testid="stSidebar"] { border-right: 1px solid var(--border); }
 
 .hero-title {
     font-family: 'Bebas Neue', sans-serif;
@@ -109,10 +108,8 @@ html, body, [class*="css"] {
 }
 
 [data-testid="stTextInput"] input {
-    background: var(--card) !important;
     border: 1.5px solid var(--border) !important;
     border-radius: 8px !important;
-    color: var(--text) !important;
     font-family: 'DM Sans', sans-serif !important;
     font-size: 1rem !important;
     padding: 0.75rem 1rem !important;
@@ -146,8 +143,6 @@ html, body, [class*="css"] {
 }
 
 [data-testid="stButton"] > button:not([kind="primary"]) {
-    background: var(--card) !important;
-    color: var(--text) !important;
     border: 1px solid var(--border) !important;
     border-radius: 6px !important;
     font-family: 'DM Sans', sans-serif !important;
@@ -202,7 +197,7 @@ html, body, [class*="css"] {
     font-family: 'Bebas Neue', sans-serif;
     font-size: clamp(2rem, 4vw, 3.2rem);
     letter-spacing: 0.05em;
-    color: white;
+    color: var(--text);
     line-height: 1.1;
     margin-bottom: 0.5rem;
 }
@@ -243,7 +238,7 @@ html, body, [class*="css"] {
 .overview-text {
     font-size: 0.92rem;
     line-height: 1.7;
-    color: #94a3b8;
+    color: var(--muted);
     border-left: 3px solid var(--gold);
     padding-left: 1rem;
     margin: 1rem 0;
@@ -266,7 +261,6 @@ hr { border-color: var(--border) !important; margin: 2rem 0 !important; }
 [data-testid="stAlert"] { border-radius: 10px !important; border: 1px solid var(--border) !important; }
 
 [data-testid="stExpander"] {
-    background: var(--card) !important;
     border: 1px solid var(--border) !important;
     border-radius: 10px !important;
 }
@@ -347,26 +341,54 @@ def get_top_adjectives(texts):
 
 # ── API FUNCTIONS ──────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
+def fuzzy_search_multi(query):
+    """
+    Calls search/multi, runs Levenshtein fuzzy match against all results,
+    returns (best_result_dict, matched_title, score).
+    """
+    session = requests.Session()
+    session.mount("https://", HTTPAdapter(max_retries=Retry(total=3, backoff_factor=1)))
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        res = session.get(
+            "https://api.themoviedb.org/3/search/multi",
+            params={"api_key": TMDB_API_KEY, "query": query, "include_adult": False},
+            headers=headers, timeout=10
+        )
+        results = res.json().get('results', [])
+        # Keep only movie/tv results that have a title or name
+        candidates = [r for r in results if r.get('media_type') in ('movie', 'tv') and (r.get('title') or r.get('name'))]
+        if not candidates:
+            return None, None, 0
+
+        # Build a title→result map for fuzzy matching
+        title_map = {(r.get('title') or r.get('name')): r for r in candidates}
+        best_title, score = fuzz_process.extractOne(query, list(title_map.keys()))
+        return title_map[best_title], best_title, score
+    except Exception:
+        return None, None, 0
+
+
+@st.cache_data(ttl=3600)
 def get_full_movie_intelligence(query=None, movie_id=None):
     session = requests.Session()
     session.mount("https://", HTTPAdapter(max_retries=Retry(total=3, backoff_factor=1)))
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
         if not movie_id:
-            s_res = session.get("https://api.themoviedb.org/3/search/movie",
-                                params={"api_key": TMDB_API_KEY, "query": query},
-                                headers=headers, timeout=10)
-            # BUG FIX: Handle empty search results gracefully
-            search_results = s_res.json().get('results', [])
-            if not search_results:
-                return "NOT_FOUND" 
-            movie_id = search_results[0]['id']
-            
-        full_res = session.get(f"https://api.themoviedb.org/3/movie/{movie_id}",
-                               params={"api_key": TMDB_API_KEY, "append_to_response": "videos,credits,reviews,recommendations"},
-                               headers=headers, timeout=15)
+            # Use fuzzy multi-search to resolve the ID
+            best, best_title, score = fuzzy_search_multi(query)
+            if not best:
+                return "NOT_FOUND"
+            movie_id = best['id']
+
+        full_res = session.get(
+            f"https://api.themoviedb.org/3/movie/{movie_id}",
+            params={"api_key": TMDB_API_KEY, "append_to_response": "videos,credits,reviews,recommendations"},
+            headers=headers, timeout=15
+        )
         return full_res.json()
-    except:
+    except Exception:
         return None
 
 @st.cache_data(ttl=3600)
@@ -443,6 +465,12 @@ if st.session_state.page == "Main Analytics":
     should_run = run_clicked or st.session_state.target_id or st.session_state.search_query
 
     if should_run and target_movie:
+        # ── FUZZY MATCH CHECK (only when not using a direct movie_id) ──────
+        if not st.session_state.target_id:
+            _, best_title, score = fuzzy_search_multi(target_movie)
+            if best_title and score < 95:
+                st.info(f"🎬 Did you mean: **{best_title}**? Showing results for that title.")
+
         with st.spinner("Fetching intelligence…"):
             data = get_full_movie_intelligence(query=target_movie, movie_id=st.session_state.target_id)
 
@@ -470,7 +498,7 @@ if st.session_state.page == "Main Analytics":
                 <div class='movie-meta'>{data['release_date'][:4]} &nbsp;·&nbsp; {data.get('runtime','—')} min &nbsp;·&nbsp; {data.get('original_language','').upper()}</div>
                 <div style='margin-bottom:1rem;'>{genres_html}</div>
                 <div class='rating-badge'>★ &nbsp;{data['vote_average']:.1f}
-                    <span style='font-family:"DM Sans",sans-serif;font-size:0.75rem;color:#94a3b8;margin-left:0.4rem;'>
+                    <span style='font-family:"DM Sans",sans-serif;font-size:0.75rem;color:var(--muted);margin-left:0.4rem;'>
                         /10 &nbsp;({data.get('vote_count','—')} votes)
                     </span>
                 </div>
@@ -566,7 +594,7 @@ if st.session_state.page == "Main Analytics":
                         <div style='font-family:"DM Mono",monospace;font-size:0.65rem;
                                     letter-spacing:0.15em;text-transform:uppercase;
                                     color:#87CEEB;margin-bottom:0.6rem;'>● Positive Traits</div>
-                        <div style='font-size:0.9rem;color:#e2e8f0;line-height:1.8;'>
+                        <div style='font-size:0.9rem;color:var(--text);line-height:1.8;'>
                             {", ".join(pos_words) if pos_words else "—"}
                         </div>
                     </div>
@@ -574,7 +602,7 @@ if st.session_state.page == "Main Analytics":
                         <div style='font-family:"DM Mono",monospace;font-size:0.65rem;
                                     letter-spacing:0.15em;text-transform:uppercase;
                                     color:#E50914;margin-bottom:0.6rem;'>● Negative Traits</div>
-                        <div style='font-size:0.9rem;color:#e2e8f0;line-height:1.8;'>
+                        <div style='font-size:0.9rem;color:var(--text);line-height:1.8;'>
                             {", ".join(neg_words) if neg_words else "—"}
                         </div>
                     </div>
