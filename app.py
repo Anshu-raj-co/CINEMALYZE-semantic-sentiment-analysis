@@ -476,7 +476,7 @@ if st.session_state.page == "Main Analytics":
     movie_input = st.text_input(
         "SEARCH  —  movie title, actor, director, or partial name",
         value=st.session_state.search_query,
-        placeholder="e.g. Inception · Sridevi · incepton · Mom Sridevi…"
+        placeholder="search any movie, show, actor, director",
     )
 
     col_search, col_clear = st.columns([3, 1])
