@@ -18,6 +18,8 @@ from urllib3.util.retry import Retry
 from thefuzz import process as fuzz_process
 import nltk
 
+st.set_page_config(page_title="Cinemalyze", page_icon="🎬", layout="wide")
+
 # The POS Tagger fix for Python 3.13
 nltk.download('averaged_perceptron_tagger_eng')
 
@@ -56,8 +58,6 @@ except Exception as e:
 
 # --- CONFIG ---
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "f1d69efb3938a73c4aee8a756489171d")
-
-st.set_page_config(page_title="Cinemalyze", page_icon="🎬", layout="wide")
 
 # ── DESIGN SYSTEM ──────────────────────────────────────────────────────────────
 st.markdown("""
