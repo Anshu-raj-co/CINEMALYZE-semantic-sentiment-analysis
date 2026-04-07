@@ -1,3 +1,13 @@
+---
+title: Cinemalyze
+emoji: 🎬
+colorFrom: yellow
+colorTo: blue
+sdk: streamlit
+sdk_version: 1.43.0
+app_file: app.py
+pinned: false
+---
 # 🎬 Cinemalyze — Real-Time Movie Sentiment Intelligence Engine
 
 Cinemalyze is a real-time NLP-powered movie intelligence platform that analyzes audience sentiment using live data from TMDb. It combines dual-model machine learning (Logistic Regression + Extra Trees) with advanced text processing to deliver interactive, explainable insights into movie reviews.
